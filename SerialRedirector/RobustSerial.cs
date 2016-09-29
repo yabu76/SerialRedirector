@@ -1,36 +1,28 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Threading;
+using System.IO;
 using System.IO.Ports;
 using LibUsbDotNet.DeviceNotify;
+using System.Collections.Generic;
+using System.Threading;
 
 namespace SerialRedirector
 {
-    class RobustSerial
+    internal class RobustSerial
     {
         public enum Parity { None = 0, Odd, Even, Mark, Space, };
         public enum StopBits { None = 0, One, OnePointFive, Two, };
 
-        private const int RETRY_NUM = 5;
-        private const int REOPEN_INTERVAL = 3000; // [ms]
-        private const int REREAD_INTERVAL = 3000; // [ms]
-        private const int REWRITE_INTERVAL = 3000; // [ms]
-        private SerialPort sp_;
-        private string portName_;
-        private int baudRate_;
-        private Parity parity_;
-        private int dataBits_;
-        private StopBits stopBits_;
-        private bool isAttached_ = false;
-        private const int EVCD_ATTACH = 0;
-        private const int EVCD_DETACH = 1;
-        private const string EVNAME_ATTACH = "RobustSerial_Attach";
-        private const string EVNAME_DETACH = "RobustSerial_Detach";
-        private const string usbUniqueId_ = "1fff-ffff-ffff-8000";
+        private Stream theBaseStream;
 
-        private EventWaitHandle[] attachEventHandles_ = new EventWaitHandle[2];
+        private SerialPort _sp;
+        private string _portName;
+        private int _baudRate;
+        private Parity _parity;
+        private int _dataBits;
+        private StopBits _stopBits;
+        private bool _isAttached = false;
 
-        private static readonly Dictionary<Parity, System.IO.Ports.Parity> dictParity_ = 
+        private static readonly Dictionary<Parity, System.IO.Ports.Parity> _dictParity =
             new Dictionary<Parity, System.IO.Ports.Parity>
         {
             { Parity.None, System.IO.Ports.Parity.None },
@@ -40,7 +32,7 @@ namespace SerialRedirector
             { Parity.Space, System.IO.Ports.Parity.Space },
         };
 
-        private static readonly Dictionary<StopBits, System.IO.Ports.StopBits> dictStopBits_ =
+        private static readonly Dictionary<StopBits, System.IO.Ports.StopBits> _dictStopBits =
             new Dictionary<StopBits, System.IO.Ports.StopBits>
         {
             { StopBits.None, System.IO.Ports.StopBits.None },
@@ -49,26 +41,11 @@ namespace SerialRedirector
             { StopBits.Two, System.IO.Ports.StopBits.Two },
         };
 
-        static IDeviceNotifier devNotif = DeviceNotifier.OpenDeviceNotifier();
-
         public int BytesToRead
         {
             get
             {
-                int ret = 0;
-                try
-                {
-                    ret = sp_.BytesToRead;
-                }
-                catch (Exception ex)
-                {
-                    bool connected = WaitForReconnect_();
-                    if (!connected) throw ex;
-                    Reopen_();
-                    ret = 0;
-                }
-                return ret;
-
+                return _sp.BytesToRead;
             }
         }
 
@@ -76,33 +53,11 @@ namespace SerialRedirector
         {
             get
             {
-                bool ret;
-                try
-                {
-                    ret = sp_.DtrEnable;
-                }
-                catch (Exception ex)
-                {
-                    bool connected = WaitForReconnect_();
-                    if (!connected) throw ex;
-                    Reopen_();
-                    ret = false;
-                }
-                return ret;
+                return _sp.DtrEnable;
             }
             set
             {
-                try
-                {
-                    sp_.DtrEnable = value;
-                }
-                catch (Exception ex)
-                {
-                    bool connected = WaitForReconnect_();
-                    if (!connected) throw ex;
-                    Reopen_();
-                    sp_.DtrEnable = value;
-                }
+                _sp.DtrEnable = value;
             }
         }
 
@@ -110,178 +65,93 @@ namespace SerialRedirector
         {
             get
             {
-                bool ret;
-                try
-                {
-                    ret = sp_.RtsEnable;
-                }
-                catch (Exception ex)
-                {
-                    bool connected = WaitForReconnect_();
-                    if (!connected) throw ex;
-                    Reopen_();
-                    ret = false;
-                }
-                return ret;
+                return _sp.RtsEnable;
             }
             set
             {
-                sp_.RtsEnable = value;
+                _sp.RtsEnable = value;
             }
         }
 
         public RobustSerial(string portName, int baudRate, Parity parity, int dataBits, StopBits stopBits)
         {
-            portName_ = portName;
-            baudRate_ = baudRate;
-            parity_ = parity;
-            dataBits_ = dataBits;
-            stopBits_ = stopBits;
-            sp_ = new SerialPort(portName, baudRate, toIPParity(parity), dataBits, toIPStopBits(stopBits));
-            StartWatchingConnection_();
+            _portName = portName;
+            _baudRate = baudRate;
+            _parity = parity;
+            _dataBits = dataBits;
+            _stopBits = stopBits;
+            _sp = new SerialPort(portName, baudRate, toIPParity(parity), dataBits, toIPStopBits(stopBits));
         }
 
         public void Dispose()
         {
-            StopWatchingConnection_();
-            sp_.Dispose();
+            Dispose(true);
+        }
+
+        public void Dispose(bool disposing)
+        {
+            if (disposing && (_sp.Container != null))
+            {
+                _sp.Container.Dispose();
+            }
+            try
+            {
+                if (theBaseStream.CanRead)
+                {
+                    theBaseStream.Close();
+                    GC.ReRegisterForFinalize(theBaseStream);
+                }
+            }
+            catch
+            {
+                // ignore exception - bug with USB - serial adapters.
+            }
+            _sp.Dispose();
         }
 
         public void Open()
         {
-            try
-            {
-                sp_.Open();
-            }
-            catch (Exception ex)
-            {
-                bool connected = WaitForReconnect_();
-                if (!connected) throw ex;
-                Reopen_();
-            }
+            _sp.Open();
+            theBaseStream = _sp.BaseStream;
+            GC.SuppressFinalize(_sp.BaseStream);
+            _isAttached = true;
         }
 
         public void Close()
         {
-            sp_.Close();
+            _sp.Close();
         }
 
         public int Read(byte[] buffer, int offset, int count)
         {
-            int ret = 0;
-            try
-            {
-                ret = sp_.Read(buffer, offset, count);
-            }
-            catch (Exception ex)
-            {
-                bool connected = WaitForReconnect_();
-                if (!connected) throw ex;
-                Reopen_();
-                ret = 0;
-            }
-            return ret;
+            return _sp.Read(buffer, offset, count);
         }
 
         public void Write(byte[] buffer, int offset, int count)
         {
-            try
-            {
-                sp_.Write(buffer, offset, count);
-            }
-            catch (Exception ex)
-            {
-                bool connected = WaitForReconnect_();
-                if (!connected) throw ex;
-                Reopen_();
-            }
+            _sp.Write(buffer, offset, count);
+        }
+
+        public void FoundDisconnect()
+        {
+            _isAttached = false;
+            Close();
+        }
+
+        public void FoundConnect()
+        {
+            _isAttached = true;
+            Open();
         }
 
         private System.IO.Ports.Parity toIPParity(Parity parity)
         {
-            return dictParity_[parity];
+            return _dictParity[parity];
         }
 
         private System.IO.Ports.StopBits toIPStopBits(StopBits stopBits)
         {
-            return dictStopBits_[stopBits];
-        }
-
-        private void Reopen_()
-        {
-            for (int cnt = 0; cnt < (RETRY_NUM - 1); cnt++)
-            {
-                Thread.Sleep(REOPEN_INTERVAL);
-                sp_.Close();
-                sp_.Open();
-            }
-            Thread.Sleep(REOPEN_INTERVAL);
-            sp_.Close();
-            sp_.Open();
-        }
-
-        private void StartWatchingConnection_()
-        {
-            attachEventHandles_[EVCD_ATTACH] = new EventWaitHandle(false, EventResetMode.AutoReset,
-                EVNAME_ATTACH);
-            attachEventHandles_[EVCD_DETACH] = new EventWaitHandle(false, EventResetMode.AutoReset,
-                EVNAME_DETACH);
-            devNotif.OnDeviceNotify += 
-                new EventHandler<DeviceNotifyEventArgs>(USBDev_OnDeviceNotify_);
-        }
-
-        private void StopWatchingConnection_()
-        {
-            devNotif.OnDeviceNotify -=
-                new EventHandler<DeviceNotifyEventArgs>(USBDev_OnDeviceNotify_);
-            attachEventHandles_[EVCD_ATTACH].Close();
-            attachEventHandles_[EVCD_DETACH].Close();
-        }
-
-        private void USBDev_OnDeviceNotify_(object sender, DeviceNotifyEventArgs eargs)
-        {
-            if (eargs.Device.ClassGuid.ToString() == usbUniqueId_)
-            {
-                if (eargs.EventType == EventType.DeviceArrival)
-                {
-                    using (EventWaitHandle ewh = EventWaitHandle.OpenExisting(EVNAME_ATTACH))
-                    {
-                        isAttached_ = true;
-                        ewh.Set();
-                    }
-
-                    // EventSend(Attached);
-                }
-                else if (eargs.EventType == EventType.DeviceRemoveComplete)
-                {
-                    using (EventWaitHandle ewh = EventWaitHandle.OpenExisting(EVNAME_DETACH))
-                    {
-                        isAttached_ = false;
-                        ewh.Set();
-                    }
-                }
-            }
-        }
-
-        private bool WaitForReconnect_()
-        {
-            if (isAttached_)
-            {
-                return true;
-            }
-            for (;;)
-            {
-                int idx;
-                idx = EventWaitHandle.WaitAny(attachEventHandles_, 5000, false);
-                if (idx == EVCD_ATTACH)
-                {
-                    return true;
-                }
-                /* else if (idx == EVCD_DETACH ||
-                 * idx == EventWaitHandle.WaitTimeout) continue;
-                 */
-            }
-            // return isAttached_;
+            return _dictStopBits[stopBits];
         }
     }
 }

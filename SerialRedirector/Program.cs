@@ -1,92 +1,36 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Threading;
 using static SerialRedirector.RobustSerial;
+using LibUsbDotNet.DeviceNotify;
 
 namespace SerialRedirector
 {
     class Program
     {
-        static RobustSerial sp1 = null;
-        static RobustSerial sp2 = null;
-        private const string SP1_PORT = "COM11";
-        private const string SP2_PORT = "COM12";
-        private const int BAUD_RATE = 115200;
+        private static string _sp1Name;
+        private static string _sp2Name;
+        private static int _baudRate;
         private const Parity PARITY = Parity.None;
         private const int DATA_BITS = 8;
         private const StopBits STOP_BITS = StopBits.One;
-        private const int BUF_SIZE = 8192;
-        private const int BRIDGE_INTERVAL_DURING_FREE_TIME = 5; /* [ms] */
 
         static void Main(string[] args)
         {
-            Console.WriteLine("SerialRedirector Start.");
-
-            sp1 = new RobustSerial(SP1_PORT, BAUD_RATE, PARITY, DATA_BITS, STOP_BITS);
-            sp2 = new RobustSerial(SP2_PORT, BAUD_RATE, PARITY, DATA_BITS, STOP_BITS);
-            sp1.Open();
-            sp2.Open();
-            sp1.DtrEnable = true;
-            sp1.RtsEnable = true;
-            sp2.DtrEnable = true;
-            sp2.RtsEnable = true;
-
-            BridgePorts_(sp1, sp2);
-
-            sp2.RtsEnable = false;
-            sp2.DtrEnable = false;
-            sp1.RtsEnable = false;
-            sp1.DtrEnable = false;
-            sp2.Close();
-            sp1.Close();
-            sp2.Dispose();
-            sp2.Dispose();
-
-            Console.WriteLine("SerialRedirector Stop.");
-        }
-
-        private static int Min_(int a, int b)
-        {
-            return (a < b) ? a : b;
-        }
-
-        private static void ParseOpts_(string[] args)
-        {
-
-        }
-
-        private static void BridgePorts_(RobustSerial sp1, RobustSerial sp2)
-        {
-            int avails;
-            bool hasTraffic;
-            byte[] buf = new byte[BUF_SIZE];
-
-            for (;;)
+            if (args.Length != 3)
             {
-                hasTraffic = false;
-                avails = Min_(sp1.BytesToRead, BUF_SIZE);
-                if (avails > 0)
-                {
-                    hasTraffic = true;
-                    sp1.Read(buf, 0, avails);
-                    sp2.Write(buf, 0, avails);
-                }
-                avails = Min_(sp2.BytesToRead, BUF_SIZE);
-                if (avails > 0)
-                {
-                    hasTraffic = true;
-                    sp2.Read(buf, 0, avails);
-                    sp1.Write(buf, 0, avails);
-                }
-                if (!hasTraffic)
-                {
-                    Thread.Sleep(BRIDGE_INTERVAL_DURING_FREE_TIME); /* [ms] */
-                }
+                Console.Write("usage: SerialRedirector COM<i> COM<j> <baudrate>\n");
+                return;
             }
-        }
+            _sp1Name = args[0];
+            _sp2Name = args[1];
+            _baudRate = int.Parse(args[2]);
+            SerialRedirector redirector = new SerialRedirector(_sp1Name, _sp2Name, _baudRate, PARITY, DATA_BITS, STOP_BITS);
 
+            Console.WriteLine("Redirect Start. ({0}<=>{1}, {2}bps, Parity{3}, {4}BitsChar, {5}StopBits)\n",
+                _sp1Name, _sp2Name, _baudRate, PARITY, DATA_BITS, STOP_BITS);
+
+            redirector.DoRedirect();
+
+            Console.WriteLine("Redirect Stop.");
+        }
     }
 }
