@@ -2,7 +2,6 @@
 using System.Threading;
 using System.Windows.Forms;
 using LibUsbDotNet.DeviceNotify;
-using static SerialRedirector.RobustSerial;
 
 namespace SerialRedirector
 {
@@ -17,14 +16,15 @@ namespace SerialRedirector
         private string _sp1Name;
         private string _sp2Name;
         private int _baudRate;
-        private Parity _parity;
+        private RobustSerial.Parity _parity;
         private int _dataBits;
-        private StopBits _stopBits;
+        private RobustSerial.StopBits _stopBits;
 
         private const int BUF_SIZE = 8192;
         private const int NOTRAFFIC_INTERVAL = 0; // [ms]
 
-        public SerialRedirector(string sp1Name, string sp2Name, int baudRate, Parity parity, int dataBits, StopBits stopBits)
+        public SerialRedirector(string sp1Name, string sp2Name, int baudRate, RobustSerial.Parity parity,
+            int dataBits, RobustSerial.StopBits stopBits)
         {
             _sp1Name = sp1Name;
             _sp2Name = sp2Name;

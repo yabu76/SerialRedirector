@@ -1,5 +1,4 @@
 ﻿using System;
-using static SerialRedirector.RobustSerial;
 using LibUsbDotNet.DeviceNotify;
 
 namespace SerialRedirector
@@ -9,9 +8,9 @@ namespace SerialRedirector
         private static string _sp1Name;
         private static string _sp2Name;
         private static int _baudRate;
-        private const Parity PARITY = Parity.None;
+        private const RobustSerial.Parity PARITY = RobustSerial.Parity.None;
         private const int DATA_BITS = 8;
-        private const StopBits STOP_BITS = StopBits.One;
+        private const RobustSerial.StopBits STOP_BITS = RobustSerial.StopBits.One;
 
         static void Main(string[] args)
         {
