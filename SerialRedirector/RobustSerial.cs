@@ -118,6 +118,7 @@ namespace SerialRedirector
         public void Close()
         {
             _sp.Close();
+            _isAttached = false;
         }
 
         public int Read(byte[] buffer, int offset, int count)
@@ -132,14 +133,17 @@ namespace SerialRedirector
 
         public void FoundDisconnect()
         {
-            _isAttached = false;
             Close();
         }
 
         public void FoundConnect()
         {
-            _isAttached = true;
             Open();
+        }
+
+        public bool IsAttached()
+        {
+            return _isAttached;
         }
 
         private System.IO.Ports.Parity toIPParity(Parity parity)

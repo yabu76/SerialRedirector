@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using System.Windows.Forms;
+using System.IO.Ports;
 using LibUsbDotNet.DeviceNotify;
 
 namespace SerialRedirector
@@ -8,8 +9,6 @@ namespace SerialRedirector
     class SerialRedirector
     {
         public static IDeviceNotifier UsbDeviceNotifier = DeviceNotifier.OpenDeviceNotifier();
-        private volatile bool _sp1Attached;
-        private volatile bool _sp2Attached;
 
         private RobustSerial _sp1 = null;
         private RobustSerial _sp2 = null;
@@ -50,8 +49,6 @@ namespace SerialRedirector
                 _sp2.DtrEnable = true;
                 _sp2.RtsEnable = true;
 
-                _sp1Attached = true;
-                _sp2Attached = true;
                 _BridgePorts(_sp1, _sp2);
 
                 _sp2.RtsEnable = false;
@@ -102,11 +99,13 @@ namespace SerialRedirector
                 }
                 catch (Exception)
                 {
-                    while (_sp1Attached == false || _sp2Attached == false)
-                    {
-                        Application.DoEvents();
-                        Thread.Sleep(NOTRAFFIC_INTERVAL);
-                    }
+                    // ignoring exception. :-(
+                }
+
+                while (sp1.IsAttached() == false || sp2.IsAttached() == false)
+                {
+                    Application.DoEvents();
+                    Thread.Sleep(NOTRAFFIC_INTERVAL);
                 }
 
                 Application.DoEvents();
@@ -124,7 +123,6 @@ namespace SerialRedirector
             {
                 string portName = e.Port.Name;
                 RobustSerial sp = null;
-
                 if (portName == _sp1Name) sp = _sp1;
                 else if (portName == _sp2Name) sp = _sp2;
                 
