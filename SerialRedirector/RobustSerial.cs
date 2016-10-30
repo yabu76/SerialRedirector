@@ -5,10 +5,18 @@ using System.Collections.Generic;
 
 namespace SerialRedirector
 {
+    internal struct UsbProps
+	{
+        public UInt16 vendorId;
+        public UInt16 productId;
+        public string serialId;
+	};
+
     internal class RobustSerial
     {
         public enum Parity { None = 0, Odd, Even, Mark, Space, };
         public enum StopBits { None = 0, One, OnePointFive, Two, };
+        public enum Media { Native = 0, Usb };
 
         private Stream theBaseStream;
 
@@ -18,6 +26,8 @@ namespace SerialRedirector
         private Parity _parity;
         private int _dataBits;
         private StopBits _stopBits;
+        private Media _media;
+        private UsbProps _usbProps;
         private bool _isAttached = false;
 
         private static readonly Dictionary<Parity, System.IO.Ports.Parity> _dictParity =
@@ -79,6 +89,24 @@ namespace SerialRedirector
             _dataBits = dataBits;
             _stopBits = stopBits;
             _sp = new SerialPort(portName, baudRate, toIPParity(parity), dataBits, toIPStopBits(stopBits));
+        }
+
+        public void SetMedia(Media media, UInt16 vendorId, UInt16 productId, string serialId)
+        {
+            _media = media;
+            _usbProps.vendorId = vendorId;
+            _usbProps.productId = productId;
+            _usbProps.serialId = serialId;
+        }
+
+        public bool IsMediaUsb()
+        {
+            return _media == Media.Usb;
+        }
+
+        public UsbProps GetUsbProps()
+        {
+            return _usbProps;
         }
 
         public void Dispose()
