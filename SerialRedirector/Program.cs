@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using LibUsbDotNet.DeviceNotify;
 
 namespace SerialRedirector
@@ -22,6 +23,11 @@ namespace SerialRedirector
             _sp1Name = args[0];
             _sp2Name = args[1];
             _baudRate = int.Parse(args[2]);
+
+            Thread.GetDomain().UnhandledException +=
+                new UnhandledExceptionEventHandler(UnhandledException);
+
+
             SerialRedirector redirector = new SerialRedirector(_sp1Name, _sp2Name, _baudRate, PARITY, DATA_BITS, STOP_BITS);
 
             Console.WriteLine("Redirect Start. ({0}<=>{1}, {2}bps, Parity{3}, {4}BitsChar, {5}StopBits)\n",
@@ -30,6 +36,26 @@ namespace SerialRedirector
             redirector.DoRedirect();
 
             Console.WriteLine("Redirect Stop.");
+        }
+
+        public static void UnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            var exObj = e.ExceptionObject;
+            if (exObj != null)
+            {
+                var exType = e.ExceptionObject.GetType();
+                if (exType == typeof(ObjectDisposedException))
+                {
+                    // .NET3.5のSerialPortのバグで、ケーブル挿抜後にハンドル不能の
+                    // ObjectDisposedExceptionが返ることがある。このため、未ハンドル例外処理にて
+                    // ObjectDisposedExceptionについてのみ無視する。
+
+                }
+            }
+            else
+            {
+                Environment.Exit(0);
+            }
         }
     }
 }

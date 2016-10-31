@@ -44,8 +44,18 @@ namespace SerialRedirector
             {
                 _sp1 = new RobustSerial(_sp1Name, _baudRate, _parity, _dataBits, _stopBits);
                 _sp2 = new RobustSerial(_sp2Name, _baudRate, _parity, _dataBits, _stopBits);
-                _sp1.Open();
-                _sp2.Open();
+
+                if (_sp1.Open() == false)
+                {
+                    Console.WriteLine("{0} open failed.", _sp1Name);
+                    return;
+                }
+                if (_sp2.Open() == false)
+                {
+                    Console.WriteLine("{0} open failed.", _sp2Name);
+                    return;
+                }
+
                 _sp1.DtrEnable = true;
                 _sp1.RtsEnable = true;
                 _sp2.DtrEnable = true;
@@ -63,7 +73,7 @@ namespace SerialRedirector
                 _sp2.Dispose();
                 _sp2.Dispose();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
 
             }
@@ -135,10 +145,11 @@ namespace SerialRedirector
                     sp2.SetMedia(RobustSerial.Media.Native, 0, 0, "");
                 }
             }
-#if false
-            deviceId = @"USB\VID_067B&PID_2303\5&3A4FEDB0&0&2"
-            name = @"Prolific USB-to-Serial Comm Port (COM5)"
-#endif
+
+            // Example.
+            // deviceId = @"USB\VID_067B&PID_2303\5&3A4FEDB0&0&2"
+            // name = @"Prolific USB-to-Serial Comm Port (COM5)"
+
             var pnpInstances = new ManagementClass("Win32_PnPEntity").GetInstances();
             var regexVP = new Regex(@"^VID_....&PID_....");
             var regexN = new Regex(@"\(COM[0-9]*\)$");
@@ -185,6 +196,7 @@ namespace SerialRedirector
                     }
                 }
             }
+            Console.WriteLine("----");
         }
 
         private void _OnDeviceNotifyEvent(object sender, DeviceNotifyEventArgs e)
@@ -201,17 +213,21 @@ namespace SerialRedirector
                 {
                     if (e.EventType == EventType.DeviceArrival)
                     {
+                        Console.WriteLine("{0}: Port Arrival", portName);
                         sp.FoundConnect();
                     }
                     else // if (e.EventType == EventType.DeviceRemoveComplete)
                     {
+                        Console.WriteLine("{0}: Port Removal", portName);
                         sp.FoundDisconnect();
                     }
                 }
             }
-            else if (e.DeviceType == DeviceType.DeviceInterface)
+            else
+            if (e.DeviceType == DeviceType.DeviceInterface)
             {
                 RobustSerial sp = null;
+                string spName = "";
                 
                 UsbProps sp1UsbProps = _sp1.GetUsbProps();
                 UsbProps sp2UsbProps = _sp2.GetUsbProps();
@@ -221,6 +237,7 @@ namespace SerialRedirector
                     sp1UsbProps.serialId.CompareTo(e.Device.SerialNumber) == 0)
                 {
                     sp = _sp1;
+                    spName = _sp1Name;
                 }
                 else if (_sp2.IsMediaUsb() == true &&
                     sp2UsbProps.vendorId == e.Device.IdVendor &&
@@ -228,16 +245,19 @@ namespace SerialRedirector
                     sp2UsbProps.serialId.CompareTo(e.Device.SerialNumber) == 0)
                 {
                     sp = _sp2;
+                    spName = _sp2Name;
                 }
 
                 if (sp != null)
                 {
                     if (e.EventType == EventType.DeviceArrival)
                     {
+                        Console.WriteLine("{0}: Device Arrival", spName);
                         sp.FoundConnect();
                     }
                     else // if (e.EventType == EventType.DeviceRemoveComplete)
                     {
+                        Console.WriteLine("{0}: Device Removal", spName);
                         sp.FoundDisconnect();
                     }
                 }

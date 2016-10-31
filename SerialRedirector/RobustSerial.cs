@@ -128,23 +128,59 @@ namespace SerialRedirector
                     GC.ReRegisterForFinalize(theBaseStream);
                 }
             }
-            catch
+            catch (Exception)
             {
                 // ignore exception - bug with USB - serial adapters.
             }
             _sp.Dispose();
         }
 
-        public void Open()
+        private bool _Open()
         {
-            _sp.Open();
-            theBaseStream = _sp.BaseStream;
-            GC.SuppressFinalize(_sp.BaseStream);
+            bool success = true;
+            try
+            {
+                _sp.Open();
+            }
+            catch (Exception)
+            {
+                success = false;
+            }
+            return success;
+
+        }
+
+        public bool Open()
+        {
+            if (_isAttached == true) return true;
+
+            bool result = false;
+            for (int i = 0; i < 3; i++)
+            {
+                result = _Open();
+                if (result == true) break;
+                System.Threading.Thread.Sleep(300);
+            }
+            if (result == false) return false;
+
+            try
+            {
+                theBaseStream = _sp.BaseStream;
+                GC.SuppressFinalize(_sp.BaseStream);
+            }
+            catch
+            {
+                return false;
+            }
             _isAttached = true;
+
+            return true;
         }
 
         public void Close()
         {
+            if (_isAttached == false) return;
+
             _sp.Close();
             _isAttached = false;
         }
