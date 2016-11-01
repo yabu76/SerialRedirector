@@ -137,16 +137,16 @@ namespace SerialRedirector
 
         private bool _Open()
         {
-            bool success = true;
+            bool result = true;
             try
             {
                 _sp.Open();
             }
             catch (Exception)
             {
-                success = false;
+                result = false;
             }
-            return success;
+            return result;
 
         }
 
@@ -181,8 +181,8 @@ namespace SerialRedirector
         {
             if (_isAttached == false) return;
 
-            _sp.Close();
             _isAttached = false;
+            _sp.Close();
         }
 
         public int Read(byte[] buffer, int offset, int count)
